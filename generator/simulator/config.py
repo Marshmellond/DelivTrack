@@ -13,7 +13,7 @@ MYSQL_HOST = "192.168.157.122"
 MYSQL_PORT = 3306
 MYSQL_USER = "root"
 MYSQL_PASSWORD = "123456"
-MYSQL_DB = "delivery_poc"
+MYSQL_DB = "delivery_dashboard"
 
 # 发送频率
 INTERVAL = 0.05   # 50ms

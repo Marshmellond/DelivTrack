@@ -1,26 +1,35 @@
-"""POC 模拟器入口 — 往 Kafka 写订单"""
+"""模拟器入口 — 往 Kafka 写订单"""
 
 import json
 import time
 import sys
 import os
 
+# Ensure the parent directory (generator/) is on sys.path so 'simulator' package is importable
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from kafka import KafkaProducer
 from simulator.config import KAFKA_BOOTSTRAP, KAFKA_TOPIC, INTERVAL, BATCH_SIZE
-from simulator.generator import generate_batch
+from simulator.generator import generate_batch, load_data
+
+
+def json_serializer(obj):
+    """Serialize a Python object to JSON bytes for Kafka."""
+    return json.dumps(obj, ensure_ascii=False).encode("utf-8")
 
 
 def main():
+    # Pre-load MySQL data before starting the producer loop
+    load_data()
+
     producer = KafkaProducer(
         bootstrap_servers=KAFKA_BOOTSTRAP,
-        value_serializer=lambda v: json.dumps(v, ensure_ascii=False).encode("utf-8"),
+        value_serializer=json_serializer,
         acks="all",
         retries=3,
     )
 
-    print(f"POC 模拟器启动 → Kafka: {KAFKA_BOOTSTRAP}, Topic: {KAFKA_TOPIC}")
+    print(f"模拟器启动 → Kafka: {KAFKA_BOOTSTRAP}, Topic: {KAFKA_TOPIC}")
     print(f"频率: {INTERVAL}s × {BATCH_SIZE} = {int(BATCH_SIZE / INTERVAL)} 条/秒")
     print("按 Ctrl+C 停止\n")
 

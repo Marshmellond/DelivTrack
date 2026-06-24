@@ -1,7 +1,10 @@
 [project]
-name = "generator"
+name = "delivery-generator"
 version = "0.1.0"
-description = "Add your description here"
+description = "外卖订单数据模拟器 — 从 MySQL 读取基础数据生成订单，发送到 Kafka"
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = []
+dependencies = [
+    "kafka-python>=2.3",
+    "pymysql>=1.1",
+]
