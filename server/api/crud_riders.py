@@ -86,7 +86,7 @@ def create_rider(body: RiderCreate, _admin: dict = Depends(admin_required)):
         with conn.cursor() as cur:
             cur.execute(
                 "INSERT INTO riders (name, phone, city, vehicle, status) VALUES (%s, %s, %s, %s, %s)",
-                (body.name, body.phone, getattr(body, 'vehicle', '电动车'), body.status),
+                (body.name, body.phone, getattr(body, "city", ""), getattr(body, "vehicle", "电动车"), body.status),
             )
             conn.commit()
             rid = cur.lastrowid

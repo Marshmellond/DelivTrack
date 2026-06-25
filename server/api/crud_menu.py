@@ -6,7 +6,7 @@ from .auth import admin_required
 from .database import get_connection
 from .models import MenuItemCreate, MenuItemResponse, MenuItemUpdate
 
-router = APIRouter(prefix="/menu", tags=["menu"])
+router = APIRouter(prefix="/menu-items", tags=["menu"])
 
 
 def _row_to_item(row) -> dict:

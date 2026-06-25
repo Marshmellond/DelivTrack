@@ -1,7 +1,14 @@
-"""Generate massive demo data for delivery dashboard POC.
+"""Seeds delivery_dashboard with realistic demo data.
 
-Seeds 500 realistic orders into delivery_dashboard and populates all dashboard
-aggregation tables from the order data.
+Features:
+- 1000 users, 15 merchants, 95 menu items, 50 riders
+- 1000 orders over last 7 days with realistic patterns:
+  * Peak hours (11-13, 17-19) get more orders
+  * Weekdays more than weekends
+  * Status lifecycle: older orders delivered, recent ones created
+- All dashboard aggregations computed from real order data
+- All timestamps relative to NOW()
+- All user passwords = '123456' (bcrypt hashed)
 
 Usage:
     cd C:/Users/skv/project/dev_project/DelivTrack/server
@@ -10,6 +17,7 @@ Usage:
 import pymysql
 import random
 import json
+import bcrypt
 from datetime import datetime, timedelta
 
 # ============================================================
@@ -26,7 +34,7 @@ MYSQL_CFG = {
 }
 
 # ============================================================
-# Static reference data (mirrors existing seed)
+# Static reference data
 # ============================================================
 
 MERCHANT_INFO = {
@@ -93,24 +101,40 @@ MENU_ITEMS_BY_CATEGORY = {
 # Helpers
 # ============================================================
 
-random.seed(42)  # reproducible runs
+random.seed(42)
 
-BASE_DATE = datetime(2026, 6, 25, 14, 0, 0)  # "now"
+# Pre-compute bcrypt hash for '123456' (same salt for reproducibility)
+PASSWORD_HASH = bcrypt.hashpw(b"123456", bcrypt.gensalt()).decode()
+
+# Chinese family names and given names for realistic user names
+SURNAMES = ["张", "李", "王", "刘", "陈", "杨", "赵", "黄", "周", "吴",
+            "徐", "孙", "马", "朱", "胡", "郭", "何", "高", "林", "罗"]
+GIVEN_CHARS = ["伟", "芳", "娜", "敏", "静", "丽", "强", "磊", "洋", "勇",
+               "艳", "杰", "涛", "明", "超", "秀英", "华", "慧", "鑫", "桂英"]
+
+# Rider names
+RIDER_SURNAMES = ["赵", "钱", "孙", "李", "周", "吴", "郑", "王", "冯", "陈"]
+RIDER_GIVENS = ["强", "勇", "刚", "军", "伟", "磊", "飞", "鹏", "龙", "峰"]
 
 
-def random_time_24h(offset_hours=0.0):
-    """Return a random datetime within the last 24 hours (with optional offset)."""
-    seconds_ago = random.uniform(offset_hours * 3600, 24 * 3600)
-    return BASE_DATE - timedelta(seconds=seconds_ago)
+def random_name(surnames, givens, idx):
+    """Deterministic name based on index."""
+    s = surnames[idx % len(surnames)]
+    g = givens[(idx // len(surnames)) % len(givens)]
+    # Add a second given name character sometimes
+    if idx % 3 == 0:
+        g += givens[(idx * 7 + 3) % len(givens)]
+    return s + g
 
 
-def order_no(i):
-    """DD + date + 6-digit zero-padded sequence."""
-    return f"DD{BASE_DATE.strftime('%Y%m%d')}{i:06d}"
+def random_phone():
+    """Generate a realistic Chinese mobile number."""
+    prefixes = ["138", "139", "150", "151", "152", "158", "159", "186", "187", "188"]
+    return random.choice(prefixes) + "".join(str(random.randint(0, 9)) for _ in range(8))
 
 
-def build_items(category, count=None):
-    """Pick random menu items from a category and return a JSON list."""
+def build_order_items(category, count=None):
+    """Pick random menu items from a category and return a JSON-serializable list."""
     pool = MENU_ITEMS_BY_CATEGORY.get(category, MENU_ITEMS_BY_CATEGORY["中餐"])
     if count is None:
         count = random.choices([1, 2, 3, 4], weights=[25, 40, 25, 10], k=1)[0]
@@ -127,133 +151,402 @@ def item_total(items):
     return sum(it["price"] * it["quantity"] for it in items)
 
 
+def hour_weight(hour):
+    """Return a probability weight for a given hour (0-23).
+    Peak hours 11-13 and 17-19 get the highest weight."""
+    if 11 <= hour <= 13:
+        return 8.0
+    elif 17 <= hour <= 19:
+        return 9.0
+    elif 10 <= hour <= 14:
+        return 5.0
+    elif 16 <= hour <= 20:
+        return 6.0
+    elif 7 <= hour <= 9:
+        return 4.0
+    elif 21 <= hour <= 22:
+        return 3.0
+    elif 0 <= hour <= 5:
+        return 0.3
+    else:
+        return 2.0
+
+
+def weekday_weight(dow):
+    """Return a probability weight for day of week (0=Mon, 6=Sun).
+    Weekdays higher than weekends."""
+    if dow < 5:  # Mon-Fri
+        return 1.0
+    else:  # Sat-Sun
+        return 0.6
+
+
 # ============================================================
-# Step 1: Clean old data
+# Step 0: Clean ALL tables
 # ============================================================
 
-def clean_data(cur):
-    """Truncate orders and all dashboard tables."""
-    print("[1/6] Cleaning old data...")
+def clean_all(cur):
+    """Truncate all tables in dependency-safe order."""
+    print("[0/8] Cleaning all tables...")
     cur.execute("SET FOREIGN_KEY_CHECKS=0")
-    for t in ["orders", "dashboard_hourly", "dashboard_merchant_rank",
-              "dashboard_region", "dashboard_summary"]:
-        cur.execute(f"TRUNCATE TABLE {t}")
-    cur.execute("SET FOREIGN_KEY_CHECKS=1")
-    print("  -> Truncated orders + 4 dashboard tables")
-
-
-# ============================================================
-# Step 2: Ensure extra dashboard_summary columns exist
-# ============================================================
-
-def ensure_summary_columns(cur):
-    """Add rider_online / rider_delivering / avg_delivery_time / cancel_rate
-    if they don't already exist in dashboard_summary."""
-    cur.execute("DESCRIBE dashboard_summary")
-    existing = {r[0] for r in cur.fetchall()}
-    additions = [
-        ("rider_online",      "INT DEFAULT 0"),
-        ("rider_delivering",  "INT DEFAULT 0"),
-        ("avg_delivery_time", "DECIMAL(6,2) DEFAULT 0"),
-        ("cancel_rate",       "DECIMAL(5,2) DEFAULT 0"),
+    tables = [
+        "dashboard_hourly",
+        "dashboard_merchant_rank",
+        "dashboard_region",
+        "dashboard_summary",
+        "orders",
+        "menu_items",
+        "riders",
+        "merchants",
+        "users",
     ]
-    for col_name, col_def in additions:
-        if col_name not in existing:
-            cur.execute(f"ALTER TABLE dashboard_summary ADD COLUMN {col_name} {col_def}")
-            print(f"  -> Added column dashboard_summary.{col_name}")
+    for t in tables:
+        cur.execute(f"TRUNCATE TABLE {t}")
+        print(f"  TRUNCATE {t}")
+    cur.execute("SET FOREIGN_KEY_CHECKS=1")
+    print("  -> All tables cleaned")
 
 
 # ============================================================
-# Step 3: Generate 500 orders
+# Step 1: Seed users (1000)
+# ============================================================
+
+def seed_users(cur, conn):
+    """Insert 1000 users with password='123456'."""
+    print("[1/8] Seeding 1000 users...")
+
+    rows = []
+    for i in range(1000):
+        username = f"user_{i:04d}"
+        phone = random_phone()
+        address = f"测试地址{i % 300}号"
+        role = "admin" if i < 5 else "user"  # First 5 are admins
+        rows.append((username, PASSWORD_HASH, phone, address, role))
+
+    cur.executemany(
+        "INSERT INTO users (username, password, phone, address, role, create_time) "
+        "VALUES (%s, %s, %s, %s, %s, NOW())",
+        rows,
+    )
+    conn.commit()
+    print(f"  -> Inserted {cur.rowcount} users (5 admin + 995 user)")
+
+
+# ============================================================
+# Step 2: Seed merchants (15)
+# ============================================================
+
+def seed_merchants(cur, conn):
+    """Insert 15 merchants."""
+    print("[2/8] Seeding 15 merchants...")
+
+    streets = ["中山路", "人民路", "解放路", "建设路", "南京路", "北京路",
+               "延安路", "长江路", "黄河路", "五一街", "文化路", "学院路",
+               "科技路", "光明路", "朝阳路"]
+    phones = ["010-", "021-", "020-", "0755-", "0571-"]
+
+    rows = []
+    for mid in range(1, 16):
+        info = MERCHANT_INFO[mid]
+        city_idx = ["北京", "上海", "广州", "深圳", "杭州"].index(info["city"])
+        address = f"{info['city']}{info['district']}{streets[mid-1]}{random.randint(1,300)}号"
+        phone = f"{phones[city_idx]}{random.randint(10000000, 99999999)}"
+        rows.append((info["name"], info["category"], info["city"], address, phone))
+
+    cur.executemany(
+        "INSERT INTO merchants (name, category, city, address, phone, status, create_time) "
+        "VALUES (%s, %s, %s, %s, %s, 'active', NOW())",
+        rows,
+    )
+    conn.commit()
+    print(f"  -> Inserted {cur.rowcount} merchants")
+
+
+# ============================================================
+# Step 3: Seed menu_items (95)
+# ============================================================
+
+def seed_menu_items(cur, conn):
+    """Insert 95 menu items distributed across all merchants."""
+    print("[3/8] Seeding 95 menu items...")
+
+    # Build a flat list of all items with category info
+    all_items = []
+    for cat, items in MENU_ITEMS_BY_CATEGORY.items():
+        for name, price in items:
+            all_items.append((cat, name, price))
+
+    # Pad to exactly 95 items by adding variants
+    base_count = len(all_items)  # 61 base items
+    extra_needed = 95 - base_count
+    extras = []
+    for i in range(extra_needed):
+        idx = i % base_count
+        cat, name, price = all_items[idx]
+        # Create a variant with slightly different price/suffix
+        variants = ["大份", "小份", "特辣", "微辣", "加量", "双拼"]
+        variant = variants[i % len(variants)]
+        new_price = round(price * random.uniform(0.85, 1.35), 2)
+        extras.append((cat, f"{name}({variant})", new_price))
+
+    all_items.extend(extras)
+    random.shuffle(all_items)
+
+    rows = []
+    for idx, (category, name, price) in enumerate(all_items[:95]):
+        # Assign to a merchant that has this category
+        matching_merchants = [mid for mid, info in MERCHANT_INFO.items()
+                              if info["category"] == category]
+        if matching_merchants:
+            merchant_id = matching_merchants[idx % len(matching_merchants)]
+        else:
+            merchant_id = random.randint(1, 15)
+        rows.append((merchant_id, name, price, category))
+
+    cur.executemany(
+        "INSERT INTO menu_items (merchant_id, name, price, category, stock, status, create_time) "
+        "VALUES (%s, %s, %s, %s, 100, 'on_sale', NOW())",
+        rows,
+    )
+    conn.commit()
+    print(f"  -> Inserted {cur.rowcount} menu items across 15 merchants")
+
+
+# ============================================================
+# Step 4: Seed riders (50)
+# ============================================================
+
+def seed_riders(cur, conn):
+    """Insert 50 riders with realistic names and statuses."""
+    print("[4/8] Seeding 50 riders...")
+
+    cities = ["北京", "上海", "广州", "深圳", "杭州"]
+    vehicles = ["电动车", "摩托车", "电动车", "电动车", "电动车"]  # mostly e-bikes
+
+    rows = []
+    for i in range(50):
+        name = random_name(RIDER_SURNAMES, RIDER_GIVENS, i)
+        phone = random_phone()
+        city = cities[i % len(cities)]
+        vehicle = vehicles[i % len(vehicles)]
+        # Status distribution: 40% online, 30% offline, 30% delivering
+        if i < 20:
+            status = "online"
+        elif i < 35:
+            status = "offline"
+        else:
+            status = "delivering"
+        rows.append((name, phone, city, vehicle, status))
+
+    cur.executemany(
+        "INSERT INTO riders (name, phone, city, vehicle, status, create_time) "
+        "VALUES (%s, %s, %s, %s, %s, NOW())",
+        rows,
+    )
+    conn.commit()
+    print(f"  -> Inserted {cur.rowcount} riders")
+
+
+# ============================================================
+# Step 5: Generate 1000 orders over last 7 days
 # ============================================================
 
 def generate_orders(cur, conn):
-    """Insert 500 orders with realistic status distribution."""
-    print("[2/6] Generating 500 orders...")
+    """Insert 1000 orders with realistic temporal patterns.
 
-    # Status distribution
-    status_pool = (
-        ["created"]    * 50   +   # 10%
-        ["accepted"]   * 75   +   # 15%
-        ["delivering"] * 100  +   # 20%
-        ["delivered"]  * 250  +   # 50%
-        ["cancelled"]  * 25        #  5%
-    )
-    assert len(status_pool) == 500
-    random.shuffle(status_pool)
+    - Spread across 7 days
+    - Peak hours (11-13, 17-19) weighted higher
+    - Weekdays weighted higher than weekends
+    - Status determined by age of order
+    """
+    print("[5/8] Generating 1000 orders...")
 
+    NOW = datetime.now().replace(second=0, microsecond=0)
+    ORDER_COUNT = 1000
+    DAYS_BACK = 7
+
+    # Determine how many orders fall in each day-hour slot
+    # by weighted sampling
+    day_hour_weights = []
+    day_hour_slots = []
+    for day_offset in range(DAYS_BACK):
+        dt = NOW - timedelta(days=day_offset)
+        dow = dt.weekday()  # 0=Mon, 6=Sun
+        for hour in range(24):
+            w = hour_weight(hour) * weekday_weight(dow)
+            day_hour_weights.append(w)
+            day_hour_slots.append((day_offset, hour))
+
+    total_weight = sum(day_hour_weights)
+    # Normalize and sample
+    normalized = [w / total_weight for w in day_hour_weights]
+
+    # How many orders per slot
+    slot_counts = [0] * len(day_hour_slots)
+    for _ in range(ORDER_COUNT):
+        slot_idx = random.choices(range(len(day_hour_slots)), weights=normalized, k=1)[0]
+        slot_counts[slot_idx] += 1
+
+    # Now generate individual orders
     rows = []
-    for i in range(500):
-        status = status_pool[i]
-        mid = random.randint(1, 15)
-        info = MERCHANT_INFO[mid]
-        category = info["category"]
-        city = info["city"]
+    order_idx = 0
+    base_date_str = NOW.strftime("%Y%m%d")
 
-        # District: 70% merchant's actual district, 30% random from city
-        if random.random() < 0.7:
-            district = info["district"]
-        else:
-            district = random.choice(CITY_DISTRICTS[city])
+    for slot_idx, count in enumerate(slot_counts):
+        if count == 0:
+            continue
+        day_offset, hour = day_hour_slots[slot_idx]
+        for _ in range(count):
+            order_idx += 1
 
-        # Items
-        items = build_items(category)
-        delivery_fee = round(random.uniform(3.0, 8.0), 2)
-        total = round(item_total(items) + delivery_fee, 2)
+            # Base time: the slot hour on the target day
+            order_day = NOW - timedelta(days=day_offset)
+            # Random minute/seconds within the hour
+            minute = random.randint(0, 59)
+            second = random.randint(0, 59)
+            order_ts = order_day.replace(hour=hour, minute=minute, second=second)
 
-        # Distance
-        distance = round(random.uniform(0.5, 15.0), 2)
+            # Clamp: cannot be in the future
+            if order_ts > NOW:
+                order_ts = NOW - timedelta(minutes=random.randint(1, 30))
 
-        # Rider assignment
-        if status == "created":
-            rider_id = None
-        else:
-            rider_id = random.randint(1, 50)
+            # How many hours ago is this order?
+            hours_ago = (NOW - order_ts).total_seconds() / 3600
 
-        # Timestamp (biased per status — earlier statuses = more recent)
-        if status == "created":
-            ts = random_time_24h(offset_hours=0)   # last 0-24h (skewed recent)
-        elif status == "accepted":
-            ts = random_time_24h(offset_hours=1)   # at least 1h ago
-        elif status == "delivering":
-            ts = random_time_24h(offset_hours=2)   # at least 2h ago
-        elif status == "delivered":
-            ts = random_time_24h(offset_hours=3)   # at least 3h ago
-        else:  # cancelled
-            ts = random_time_24h(offset_hours=0)
+            # Status based on age
+            status = _determine_status(hours_ago)
 
-        rows.append((
-            order_no(i + 1),     # order_no
-            random.randint(1, 1000),  # user_id
-            mid,                      # merchant_id
-            rider_id,                 # rider_id
-            json.dumps(items, ensure_ascii=False),  # items
-            total,                    # total_amount
-            delivery_fee,             # delivery_fee
-            distance,                 # distance
-            status,                   # status
-            city,                     # city
-            district,                 # district
-            ts,                       # create_time
-        ))
+            # Merchant
+            mid = random.randint(1, 15)
+            info = MERCHANT_INFO[mid]
+            category = info["category"]
+            city = info["city"]
+
+            # District: 70% merchant's actual district, 30% random from city
+            if random.random() < 0.7:
+                district = info["district"]
+            else:
+                district = random.choice(CITY_DISTRICTS[city])
+
+            # Items
+            items = build_order_items(category)
+            delivery_fee = round(random.uniform(3.0, 8.0), 2)
+            total = round(item_total(items) + delivery_fee, 2)
+            distance = round(random.uniform(0.5, 15.0), 2)
+
+            # Rider assignment
+            if status == "created":
+                rider_id = None
+            else:
+                rider_id = random.randint(1, 50)
+
+            # Secondary timestamps based on status
+            accept_time = None
+            delivery_time = None
+            finish_time = None
+
+            if status in ("accepted", "delivering", "delivered"):
+                # Accept 5-30 minutes after creation
+                accept_offset = random.randint(5, 30)
+                accept_time = order_ts + timedelta(minutes=accept_offset)
+
+            if status in ("delivering", "delivered"):
+                # Delivery starts 10-45 minutes after accept
+                deliver_offset = random.randint(10, 45)
+                delivery_time = (accept_time or order_ts) + timedelta(minutes=deliver_offset)
+
+            if status == "delivered":
+                # Finish 5-40 minutes after delivery start
+                finish_offset = random.randint(5, 40)
+                finish_time = (delivery_time or order_ts) + timedelta(minutes=finish_offset)
+
+            # Order number: DD + date + 6-digit sequence
+            order_no = f"DD{order_ts.strftime('%Y%m%d')}{order_idx:06d}"
+
+            rows.append((
+                order_no,
+                random.randint(1, 1000),     # user_id
+                mid,                          # merchant_id
+                rider_id,                     # rider_id
+                json.dumps(items, ensure_ascii=False),
+                total,
+                delivery_fee,
+                distance,
+                status,
+                city,
+                district,
+                order_ts,
+                accept_time,
+                delivery_time,
+                finish_time,
+            ))
 
     sql = (
         "INSERT INTO orders (order_no, user_id, merchant_id, rider_id, "
         "items, total_amount, delivery_fee, distance, status, city, district, "
-        "create_time) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)"
+        "create_time, accept_time, delivery_time, finish_time) "
+        "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)"
     )
     cur.executemany(sql, rows)
     conn.commit()
-    print(f"  -> Inserted {cur.rowcount} orders")
+    print(f"  -> Inserted {cur.rowcount} orders over 7 days")
+
+
+def _determine_status(hours_ago):
+    """Determine order status based on how many hours ago it was created."""
+    r = random.random()
+
+    if hours_ago < 1.0:
+        # Very recent: mostly created/accepted
+        if r < 0.55:
+            return "created"
+        elif r < 0.85:
+            return "accepted"
+        elif r < 0.97:
+            return "delivering"
+        else:
+            return "cancelled"
+    elif hours_ago < 3.0:
+        # 1-3 hours ago
+        if r < 0.15:
+            return "created"
+        elif r < 0.50:
+            return "accepted"
+        elif r < 0.75:
+            return "delivering"
+        elif r < 0.90:
+            return "delivered"
+        else:
+            return "cancelled"
+    elif hours_ago < 6.0:
+        # 3-6 hours ago
+        if r < 0.03:
+            return "created"
+        elif r < 0.15:
+            return "accepted"
+        elif r < 0.30:
+            return "delivering"
+        elif r < 0.93:
+            return "delivered"
+        else:
+            return "cancelled"
+    else:
+        # 6+ hours ago: mostly delivered
+        if r < 0.92:
+            return "delivered"
+        elif r < 0.98:
+            return "delivering"
+        else:
+            return "cancelled"
 
 
 # ============================================================
-# Step 4: Populate dashboard_summary
+# Step 6: Populate dashboard_summary
 # ============================================================
 
 def populate_dashboard_summary(cur, conn):
-    """Compute aggregates from orders and upsert dashboard_summary (id=1)."""
-    print("[3/6] Computing dashboard_summary...")
+    """Compute all aggregates from orders and upsert dashboard_summary (id=1)."""
+    print("[6/8] Computing dashboard_summary...")
 
     # GMV & order count
     cur.execute("SELECT COALESCE(SUM(total_amount),0), COUNT(*) FROM orders")
@@ -267,19 +560,20 @@ def populate_dashboard_summary(cur, conn):
     cancelled = cur.fetchone()[0]
     cancel_rate = round(cancelled / order_count * 100, 2) if order_count else 0
 
-    # Avg delivery time — compute for delivered orders from create_time
-    # Since we don't store finish_time, use a reasonable random range
+    # Avg delivery time for delivered orders (finish_time - create_time)
     cur.execute(
-        "SELECT AVG(TIMESTAMPDIFF(MINUTE, create_time, "
-        "DATE_ADD(create_time, INTERVAL FLOOR(15 + RAND() * 30) MINUTE))) "
-        "FROM orders WHERE status = 'delivered'"
+        "SELECT AVG(TIMESTAMPDIFF(MINUTE, create_time, finish_time)) "
+        "FROM orders WHERE status = 'delivered' AND finish_time IS NOT NULL"
     )
     avg_del = cur.fetchone()[0]
     avg_delivery_time = round(float(avg_del), 2) if avg_del else round(random.uniform(20, 35), 2)
 
-    # Rider stats (realistic random)
-    rider_online = random.randint(35, 50)
-    rider_delivering = random.randint(10, 25)
+    # Rider stats from riders table
+    cur.execute("SELECT COUNT(*) FROM riders WHERE status = 'online'")
+    rider_online = cur.fetchone()[0]
+
+    cur.execute("SELECT COUNT(*) FROM riders WHERE status = 'delivering'")
+    rider_delivering = cur.fetchone()[0]
 
     cur.execute(
         "REPLACE INTO dashboard_summary "
@@ -290,18 +584,18 @@ def populate_dashboard_summary(cur, conn):
          rider_delivering, avg_delivery_time, cancel_rate),
     )
     conn.commit()
-    print(f"  -> GMV={gmv:.2f}, orders={order_count}, avg={avg_order_amount}")
+    print(f"  -> GMV={gmv:.2f}, orders={order_count}, avg={avg_order_amount:.2f}")
     print(f"  -> riders_online={rider_online}, delivering={rider_delivering}")
     print(f"  -> avg_delivery={avg_delivery_time}min, cancel_rate={cancel_rate}%")
 
 
 # ============================================================
-# Step 5: Populate dashboard_region (20 rows)
+# Step 7: Populate dashboard_region (20 rows)
 # ============================================================
 
 def populate_dashboard_region(cur, conn):
-    """Compute city x district aggregates and guarantee all 20 combinations."""
-    print("[4/6] Computing dashboard_region...")
+    """Compute city x district aggregates and guarantee all 20 combos."""
+    print("[7/8] Computing dashboard_region...")
 
     # Aggregate from real orders
     cur.execute(
@@ -320,22 +614,22 @@ def populate_dashboard_region(cur, conn):
             cur.execute(
                 "INSERT INTO dashboard_region (city, district, order_count, gmv, update_time) "
                 "VALUES (%s,%s,%s,%s,NOW()) "
-                "ON DUPLICATE KEY UPDATE order_count=%s, gmv=%s, update_time=NOW()",
-                (city, district, cnt, gmv, cnt, gmv),
+                "ON DUPLICATE KEY UPDATE order_count=VALUES(order_count), gmv=VALUES(gmv), update_time=NOW()",
+                (city, district, cnt, gmv),
             )
             inserted += 1
 
     conn.commit()
-    print(f"  -> Upserted {inserted} region rows")
+    print(f"  -> Upserted {inserted} region rows (5 cities x 4 districts)")
 
 
 # ============================================================
-# Step 6: Populate dashboard_merchant_rank (15 rows)
+# Step 8: Populate dashboard_merchant_rank (15 rows)
 # ============================================================
 
 def populate_dashboard_merchant_rank(cur, conn):
-    """Compute per-merchant aggregates, joined with merchants.name."""
-    print("[5/6] Computing dashboard_merchant_rank...")
+    """Compute per-merchant aggregates from orders joined with merchants."""
+    print("[8/8] Computing dashboard_merchant_rank...")
 
     cur.execute(
         "SELECT m.name, m.category, "
@@ -353,8 +647,9 @@ def populate_dashboard_merchant_rank(cur, conn):
             "INSERT INTO dashboard_merchant_rank "
             "(merchant_name, category, order_count, gmv, update_time) "
             "VALUES (%s,%s,%s,%s,NOW()) "
-            "ON DUPLICATE KEY UPDATE category=%s, order_count=%s, gmv=%s, update_time=NOW()",
-            (name, category, cnt, float(gmv), category, cnt, float(gmv)),
+            "ON DUPLICATE KEY UPDATE category=VALUES(category), order_count=VALUES(order_count), "
+            "gmv=VALUES(gmv), update_time=NOW()",
+            (name, category, cnt, float(gmv)),
         )
 
     conn.commit()
@@ -362,42 +657,55 @@ def populate_dashboard_merchant_rank(cur, conn):
 
 
 # ============================================================
-# Step 7: Populate dashboard_hourly (48 rows, last 24h @ 30min)
+# Step 9: Populate dashboard_hourly (168 slots = 7 days x 24 hours)
 # ============================================================
 
 def populate_dashboard_hourly(cur, conn):
-    """Generate 48 time slots (every 30 min over last 24h) and aggregate."""
-    print("[6/6] Computing dashboard_hourly...")
+    """Generate 168 time slots (7 days x 24 hours) with real order aggregation."""
+    print("[9/8] Computing dashboard_hourly (168 slots)...")
 
+    NOW = datetime.now().replace(minute=0, second=0, microsecond=0)
     inserted = 0
-    for slot_idx in range(48):
-        slot_start = BASE_DATE - timedelta(minutes=(48 - slot_idx) * 30)
-        slot_end = slot_start + timedelta(minutes=30)
 
-        cur.execute(
-            "SELECT COUNT(*), COALESCE(SUM(total_amount),0) "
-            "FROM orders "
-            "WHERE create_time >= %s AND create_time < %s",
-            (slot_start.strftime("%Y-%m-%d %H:%M:%S"),
-             slot_end.strftime("%Y-%m-%d %H:%M:%S")),
-        )
-        cnt, gmv = cur.fetchone()
+    for day_offset in range(7, 0, -1):  # oldest first
+        day_start = NOW - timedelta(days=day_offset)
+        for hour in range(24):
+            slot_start = day_start.replace(hour=hour)
+            slot_end = slot_start + timedelta(hours=1)
 
-        # Realistic random delivery time for slots with orders
-        if cnt > 0:
-            avg_del = round(random.uniform(15, 45), 2)
-        else:
-            avg_del = 0.0
+            cur.execute(
+                "SELECT COUNT(*), COALESCE(SUM(total_amount),0) "
+                "FROM orders "
+                "WHERE create_time >= %s AND create_time < %s",
+                (slot_start.strftime("%Y-%m-%d %H:%M:%S"),
+                 slot_end.strftime("%Y-%m-%d %H:%M:%S")),
+            )
+            cnt, gmv = cur.fetchone()
 
-        cur.execute(
-            "INSERT INTO dashboard_hourly (time_slot, order_count, gmv, avg_delivery_time) "
-            "VALUES (%s,%s,%s,%s)",
-            (slot_start.strftime("%Y-%m-%d %H:%M:%S"), cnt, float(gmv), avg_del),
-        )
-        inserted += 1
+            # Average delivery time for orders in this slot
+            if cnt > 0:
+                cur.execute(
+                    "SELECT AVG(TIMESTAMPDIFF(MINUTE, create_time, finish_time)) "
+                    "FROM orders "
+                    "WHERE create_time >= %s AND create_time < %s "
+                    "AND status = 'delivered' AND finish_time IS NOT NULL",
+                    (slot_start.strftime("%Y-%m-%d %H:%M:%S"),
+                     slot_end.strftime("%Y-%m-%d %H:%M:%S")),
+                )
+                avg_del = cur.fetchone()[0]
+                avg_del = round(float(avg_del), 2) if avg_del else round(random.uniform(15, 45), 2)
+            else:
+                avg_del = 0.0
+
+            cur.execute(
+                "INSERT INTO dashboard_hourly (time_slot, order_count, gmv, avg_delivery_time) "
+                "VALUES (%s,%s,%s,%s)",
+                (slot_start.strftime("%Y-%m-%d %H:%M:%S"), cnt, float(gmv), avg_del),
+            )
+            inserted += 1
 
     conn.commit()
-    print(f"  -> Inserted {inserted} hourly rows (48 slots x 30min)")
+    print(f"  -> Inserted {inserted} hourly rows (7 days x 24 hours)")
 
 
 # ============================================================
@@ -405,55 +713,88 @@ def populate_dashboard_hourly(cur, conn):
 # ============================================================
 
 def verify(cur):
-    """Print summary counts for every table."""
-    print("\n" + "=" * 50)
+    """Print summary counts for every table and key metrics."""
+    print("\n" + "=" * 60)
     print("VERIFICATION")
-    print("=" * 50)
+    print("=" * 60)
+
     tables = [
+        "users", "merchants", "menu_items", "riders",
         "orders", "dashboard_summary", "dashboard_region",
         "dashboard_merchant_rank", "dashboard_hourly",
-        "users", "merchants", "riders", "menu_items",
     ]
     for t in tables:
         cur.execute(f"SELECT COUNT(*) FROM {t}")
         cnt = cur.fetchone()[0]
         print(f"  {t:30s} {cnt:>6d} rows")
 
-    # Extra detail for orders
+    # Order status distribution
     cur.execute(
         "SELECT status, COUNT(*) FROM orders "
         "GROUP BY status ORDER BY FIELD(status,'created','accepted','delivering','delivered','cancelled')"
     )
     print("\n  Order status distribution:")
+    total_orders = 0
     for status, cnt in cur.fetchall():
-        pct = cnt / 500 * 100
-        print(f"    {status:12s} {cnt:>4d} ({pct:.0f}%)")
+        total_orders += cnt
+    cur.execute("SELECT COUNT(*) FROM orders")
+    total_orders = cur.fetchone()[0]
+
+    cur.execute(
+        "SELECT status, COUNT(*) FROM orders "
+        "GROUP BY status ORDER BY FIELD(status,'created','accepted','delivering','delivered','cancelled')"
+    )
+    for status, cnt in cur.fetchall():
+        pct = cnt / total_orders * 100 if total_orders > 0 else 0
+        print(f"    {status:12s} {cnt:>4d} ({pct:.1f}%)")
 
     # GMV breakout
-    cur.execute("SELECT gmv, order_count, avg_order_amount, cancel_rate FROM dashboard_summary WHERE id=1")
+    cur.execute(
+        "SELECT gmv, order_count, avg_order_amount, rider_online, rider_delivering, "
+        "avg_delivery_time, cancel_rate FROM dashboard_summary WHERE id=1"
+    )
     row = cur.fetchone()
     if row:
-        print(f"\n  dashboard_summary: GMV={float(row[0]):.2f}, "
-              f"orders={row[1]}, avg={float(row[2]):.2f}, "
-              f"cancel_rate={float(row[3])}%")
+        print(f"\n  dashboard_summary:")
+        print(f"    GMV={float(row[0]):.2f}, orders={row[1]}, avg={float(row[2]):.2f}")
+        print(f"    riders_online={row[3]}, delivering={row[4]}, "
+              f"avg_del={float(row[5])}min, cancel_rate={float(row[6])}%")
 
     # Top 5 merchants
-    cur.execute("SELECT merchant_name, order_count, gmv FROM dashboard_merchant_rank ORDER BY gmv DESC LIMIT 5")
+    cur.execute(
+        "SELECT merchant_name, order_count, gmv FROM dashboard_merchant_rank ORDER BY gmv DESC LIMIT 5"
+    )
     print("\n  Top 5 merchants:")
     for name, cnt, gmv in cur.fetchall():
         print(f"    {name:16s} {cnt:>4d} orders  GMV={float(gmv):.2f}")
 
     # Top 5 regions
-    cur.execute("SELECT city, district, order_count, gmv FROM dashboard_region ORDER BY gmv DESC LIMIT 5")
+    cur.execute(
+        "SELECT city, district, order_count, gmv FROM dashboard_region ORDER BY gmv DESC LIMIT 5"
+    )
     print("\n  Top 5 regions:")
     for city, district, cnt, gmv in cur.fetchall():
-        print(f"    {city}{district:8s} {cnt:>4d} orders  GMV={float(gmv):.2f}")
+        print(f"    {city} {district:8s} {cnt:>4d} orders  GMV={float(gmv):.2f}")
 
-    # Hourly trend
-    cur.execute("SELECT time_slot, order_count, gmv FROM dashboard_hourly WHERE order_count > 0 ORDER BY time_slot LIMIT 10")
-    print("\n  Hourly slots (first 10 with orders):")
+    # Hourly peaks (top 10 hours by order count)
+    cur.execute(
+        "SELECT time_slot, order_count, gmv FROM dashboard_hourly "
+        "WHERE order_count > 0 ORDER BY order_count DESC LIMIT 10"
+    )
+    print("\n  Top 10 busiest hours:")
     for ts, cnt, gmv in cur.fetchall():
-        print(f"    {ts} {cnt:>3d} orders  GMV={float(gmv):.2f}")
+        print(f"    {ts}  {cnt:>3d} orders  GMV={float(gmv):.2f}")
+
+    # Date range of orders
+    cur.execute("SELECT MIN(create_time), MAX(create_time) FROM orders")
+    min_dt, max_dt = cur.fetchone()
+    print(f"\n  Order date range: {min_dt}  ->  {max_dt}")
+
+    # User password check
+    cur.execute("SELECT username, LENGTH(password) FROM users LIMIT 3")
+    print("\n  Sample users (password hash length):")
+    for uname, pwlen in cur.fetchall():
+        print(f"    {uname}: password hash length={pwlen}")
 
     print("\nDone.")
 
@@ -467,13 +808,16 @@ def main():
     try:
         cur = conn.cursor()
 
-        clean_data(cur)
-        ensure_summary_columns(cur)
+        clean_all(cur)
+        seed_users(cur, conn)
+        seed_merchants(cur, conn)
+        seed_menu_items(cur, conn)
+        seed_riders(cur, conn)
         generate_orders(cur, conn)
         populate_dashboard_summary(cur, conn)
+        populate_dashboard_hourly(cur, conn)
         populate_dashboard_region(cur, conn)
         populate_dashboard_merchant_rank(cur, conn)
-        populate_dashboard_hourly(cur, conn)
         verify(cur)
 
         conn.commit()

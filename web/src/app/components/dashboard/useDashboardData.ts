@@ -37,6 +37,62 @@ export interface RecentOrder {
   city: string;
 }
 
+// ---- Fallback demo data ----
+function generateFallbackTrend(): TrendPoint[] {
+  const now = new Date();
+  const trend: TrendPoint[] = [];
+  for (let i = 23; i >= 0; i--) {
+    const t = new Date(now.getTime() - i * 3600000);
+    const slot = t.toISOString().slice(0, 13).replace('T', ' ') + ':00:00';
+    trend.push({
+      time_slot: slot,
+      order_count: Math.floor(Math.random() * 30 + 5),
+      gmv: Math.floor(Math.random() * 8000 + 500),
+    });
+  }
+  return trend;
+}
+
+const fallbackRegions: RegionData[] = [
+  { city: '北京', order_count: 245, gmv: 45600 },
+  { city: '上海', order_count: 312, gmv: 52300 },
+  { city: '广州', order_count: 198, gmv: 34800 },
+  { city: '深圳', order_count: 267, gmv: 41200 },
+  { city: '杭州', order_count: 156, gmv: 28900 },
+  { city: '成都', order_count: 134, gmv: 22100 },
+];
+
+const fallbackMerchantRank: MerchantRankData[] = [
+  { name: '美味餐厅', order_count: 89, gmv: 12500 },
+  { name: '麦当劳(朝阳店)', order_count: 76, gmv: 10200 },
+  { name: '日式拉面馆', order_count: 65, gmv: 8900 },
+  { name: '湘味人家', order_count: 58, gmv: 7600 },
+  { name: '茶颜悦色(国贸店)', order_count: 52, gmv: 6400 },
+  { name: '烧烤大王', order_count: 45, gmv: 5800 },
+  { name: '粤式点心坊', order_count: 38, gmv: 5100 },
+  { name: '重庆小面', order_count: 32, gmv: 4200 },
+  { name: '炸鸡汉堡王', order_count: 28, gmv: 3600 },
+  { name: '鲜芋传奇', order_count: 22, gmv: 2900 },
+];
+
+const fallbackRecentOrders: RecentOrder[] = (() => {
+  const cities = ['北京', '上海', '广州', '深圳'];
+  const merchants = ['美味餐厅', '麦当劳', '日式拉面', '湘味人家', '茶颜悦色'];
+  const statuses = ['pending', 'accepted', 'picking', 'delivering', 'completed'];
+  const orders: RecentOrder[] = [];
+  for (let i = 0; i < 20; i++) {
+    orders.push({
+      order_no: `ORD${String(Date.now()).slice(-8)}${String(i).padStart(2, '0')}`,
+      user_id: `user_${i + 1}`,
+      merchant: merchants[i % merchants.length],
+      amount: Math.floor(Math.random() * 150 + 20),
+      status: statuses[Math.floor(Math.random() * statuses.length)],
+      city: cities[i % cities.length],
+    });
+  }
+  return orders;
+})();
+
 export function useDashboardData() {
   const [summary, setSummary] = useState<SummaryData | null>(null);
   const [regions, setRegions] = useState<RegionData[]>([]);
@@ -73,7 +129,13 @@ export function useDashboardData() {
       setLastUpdate(new Date());
     } catch {
       setConnected(false);
-      setError('数据获取失败，请检查后端连接');
+      setError('数据获取失败，已加载演示数据');
+      // Fallback: use demo data so charts are never empty
+      setSummary({ total_orders: 482, total_gmv: 75200, rider_online_rate: 87, avg_delivery_time: 28 });
+      setRegions(fallbackRegions);
+      setMerchantRank(fallbackMerchantRank);
+      setTrend(generateFallbackTrend());
+      setRecentOrders(fallbackRecentOrders);
     } finally {
       setLoading(false);
     }

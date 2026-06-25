@@ -20,21 +20,17 @@ def _check_mysql() -> bool:
 
 
 def _check_kafka() -> bool:
-    """Return True if at least one Kafka broker responds."""
-    try:
-        from kafka import KafkaConsumer
-
-        consumer = KafkaConsumer(
-            bootstrap_servers=KAFKA_BOOTSTRAP,
-            request_timeout_ms=3000,
-            api_version_auto_timeout_ms=3000,
-        )
-        # Fetching cluster metadata confirms connectivity
-        consumer.topics()
-        consumer.close()
-        return True
-    except Exception:
-        return False
+    """Return True if at least one Kafka broker responds via TCP."""
+    import socket
+    for broker in KAFKA_BOOTSTRAP:
+        host, port = broker.split(":")
+        try:
+            s = socket.create_connection((host, int(port)), timeout=3)
+            s.close()
+            return True
+        except Exception:
+            continue
+    return False
 
 
 @router.get("/full")

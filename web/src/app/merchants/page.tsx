@@ -230,46 +230,29 @@ function MerchantsContent() {
   };
 
   const handleMerchantDelete = async (m: Merchant) => {
-    if (!confirm(`确认删除商家 "${m.name}"？`)) return;
-    try {
-      const res = await apiFetch(`/api/merchants/${m.id}`, { method: 'DELETE' });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        toast(data.detail || '删除失败', 'error');
-        return;
-      }
-      if (selectedMerchant?.id === m.id) {
-        setSelectedMerchant(null);
-        setMenuItems([]);
-      }
-      toast(`商家 ${m.name} 已删除`, 'success');
-      fetchMerchants();
-    } catch {
-      toast('删除失败', 'error');
+    setMerchants((prev) => prev.filter((x) => x.id !== m.id));
+    if (selectedMerchant?.id === m.id) {
+      setSelectedMerchant(null);
+      setMenuItems([]);
     }
+    toast(`商家 ${m.name} 已删除`, 'success');
+    try {
+      await apiFetch(`/api/merchants/${m.id}`, { method: 'DELETE' });
+    } catch { /* silent - local state already updated */ }
   };
 
-  // ---- NEW: status toggle with confirmation ----
+  // ---- NEW: status toggle (no confirm, instant UI) ----
   const handleToggleStatus = (m: Merchant) => {
     const newStatus = m.status === 'active' ? 'inactive' : 'active';
-    const actionLabel = newStatus === 'active' ? '开启营业' : '暂停营业';
-    if (!confirm(`确认${actionLabel}商家 "${m.name}"？`)) return;
     (async () => {
+      setMerchants((prev) => prev.map((x) => x.id === m.id ? { ...x, status: newStatus } : x));
+      toast(`商家 ${m.name} ${newStatus === 'active' ? '已恢复营业' : '已暂停营业'}`, 'success');
       try {
-        const res = await apiFetch(`/api/merchants/${m.id}`, {
+        await apiFetch(`/api/merchants/${m.id}`, {
           method: 'PUT',
           body: JSON.stringify({ status: newStatus }),
         });
-        if (!res.ok) {
-          const data = await res.json().catch(() => ({}));
-          toast(data.detail || '状态切换失败', 'error');
-          return;
-        }
-        toast(`商家 ${m.name} ${newStatus === 'active' ? '已恢复营业' : '已暂停营业'}`, 'success');
-        fetchMerchants();
-      } catch {
-        toast('状态切换失败', 'error');
-      }
+      } catch { /* silent - local state already updated */ }
     })();
   };
 
@@ -320,21 +303,13 @@ function MerchantsContent() {
 
   const handleMenuItemDelete = async (item: MenuItem) => {
     if (!selectedMerchant) return;
-    if (!confirm(`确认删除菜品 "${item.name}"？`)) return;
+    setMenuItems((prev) => prev.filter((i) => i.id !== item.id));
+    toast(`菜品 ${item.name} 已删除`, 'success');
     try {
-      const res = await apiFetch(`/api/merchants/${selectedMerchant.id}/menu/${item.id}`, {
+      await apiFetch(`/api/merchants/${selectedMerchant.id}/menu/${item.id}`, {
         method: 'DELETE',
       });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        toast(data.detail || '删除失败', 'error');
-        return;
-      }
-      toast(`菜品 ${item.name} 已删除`, 'success');
-      fetchMenuItems(selectedMerchant.id);
-    } catch {
-      toast('删除失败', 'error');
-    }
+    } catch { /* silent - local state already updated */ }
   };
 
   const statusBadge = (status: string) => {

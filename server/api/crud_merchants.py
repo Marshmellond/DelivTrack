@@ -120,6 +120,9 @@ def update_merchant(merchant_id: int, body: MerchantUpdate, _admin: dict = Depen
             if getattr(body, 'phone', None) is not None:
                 set_parts.append("phone = %s")
                 params.append(getattr(body, 'phone', None))
+            if getattr(body, 'status', None) is not None:
+                set_parts.append("status = %s")
+                params.append(getattr(body, 'status', None))
 
             if set_parts:
                 params.append(merchant_id)

@@ -412,7 +412,7 @@ function DashboardContent() {
         </div>
         <div className="flex items-center gap-4 flex-wrap">
           <span className="flex items-center gap-1.5 text-xs text-gray-500 bg-white/[0.03] border border-white/[0.06] rounded-lg px-2.5 py-1 font-mono">
-            🔄 下次刷新 <span className="text-cyan-400 font-bold">{countdown}</span>s
+            🔄 <span className="text-cyan-400 font-bold">{countdown}</span>s
           </span>
           <div className="flex items-center gap-2">
             <span className={`w-2 h-2 rounded-full ${connected ? 'bg-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.6)]' : 'bg-red-400'} pulse-dot`} />
@@ -426,7 +426,7 @@ function DashboardContent() {
       </div>
 
       {/* Weather indicator */}
-      <div className={`bg-white/[0.03] border rounded-2xl backdrop-blur-xl px-4 py-3 flex items-center gap-3 shadow-[0_0_30px_rgba(6,182,212,0.08)] ${weatherRisk === 'storm' ? 'border-red-500/20' : weatherRisk === 'rain' ? 'border-blue-500/20' : 'border-white/[0.06]'}`}>
+      <div className={`bg-white/[0.03] border rounded-2xl backdrop-blur-xl px-4 py-3 flex items-center gap-3 shadow-[0_0_30px_rgba(6,182,212,0.08)] transition-shadow duration-300 hover:shadow-[0_4px_32px_rgba(6,182,212,0.15)] ${weatherRisk === 'storm' ? 'border-red-500/20' : weatherRisk === 'rain' ? 'border-blue-500/20' : 'border-white/[0.06]'}`}>
         <span className="text-xl">{weather.icon}</span>
         <span className={`text-sm font-medium ${weather.color}`}>{weather.label}</span>
         {weatherRisk !== 'sunny' && (
@@ -475,15 +475,15 @@ function DashboardContent() {
       </div>
 
       {/* ===== Row 2: City bar (left 2/3) + Status donut (right 1/3) ===== */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="lg:col-span-2 bg-white/[0.03] border border-white/[0.06] rounded-2xl backdrop-blur-xl p-4 sm:p-5 shadow-[0_0_30px_rgba(6,182,212,0.08)]">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+        <div className="lg:col-span-2 bg-white/[0.03] border border-white/[0.06] rounded-2xl backdrop-blur-xl p-4 sm:p-5 shadow-[0_0_30px_rgba(6,182,212,0.08)] transition-shadow duration-300 hover:shadow-[0_4px_32px_rgba(6,182,212,0.15)]">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-sm font-medium text-white">全国各城市订单分布</h3>
             <span className="text-gray-500 text-xs">实时统计</span>
           </div>
           <ReactECharts option={cityBarOption} theme="dark" style={{ height: '300px', width: '100%' }} />
         </div>
-        <div className="bg-white/[0.03] border border-white/[0.06] rounded-2xl backdrop-blur-xl p-4 sm:p-5 shadow-[0_0_30px_rgba(6,182,212,0.08)]">
+        <div className="bg-white/[0.03] border border-white/[0.06] rounded-2xl backdrop-blur-xl p-4 sm:p-5 shadow-[0_0_30px_rgba(6,182,212,0.08)] transition-shadow duration-300 hover:shadow-[0_4px_32px_rgba(6,182,212,0.15)]">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-sm font-medium text-white">订单状态分布</h3>
             <span className="text-gray-500 text-xs">近30条订单</span>
@@ -493,8 +493,8 @@ function DashboardContent() {
       </div>
 
       {/* ===== Row 3: 24h GMV trend (left 1/2) + Category pie (right 1/2) ===== */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div className="bg-white/[0.03] border border-white/[0.06] rounded-2xl backdrop-blur-xl p-4 sm:p-5 shadow-[0_0_30px_rgba(6,182,212,0.08)]">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+        <div className="bg-white/[0.03] border border-white/[0.06] rounded-2xl backdrop-blur-xl p-4 sm:p-5 shadow-[0_0_30px_rgba(6,182,212,0.08)] transition-shadow duration-300 hover:shadow-[0_4px_32px_rgba(6,182,212,0.15)]">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-sm font-medium text-white">24 小时 GMV 趋势</h3>
             <span className="text-gray-500 text-xs">每分钟采样</span>
@@ -502,7 +502,7 @@ function DashboardContent() {
           <ReactECharts option={trendOption} theme="dark" style={{ height: '280px', width: '100%' }} />
         </div>
 
-        <div className="bg-white/[0.03] border border-white/[0.06] rounded-2xl backdrop-blur-xl p-4 sm:p-5 shadow-[0_0_30px_rgba(6,182,212,0.08)]">
+        <div className="bg-white/[0.03] border border-white/[0.06] rounded-2xl backdrop-blur-xl p-4 sm:p-5 shadow-[0_0_30px_rgba(6,182,212,0.08)] transition-shadow duration-300 hover:shadow-[0_4px_32px_rgba(6,182,212,0.15)]">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-sm font-medium text-white">品类 GMV 分布</h3>
             <span className="text-gray-500 text-xs">按商家分类汇总</span>
@@ -512,15 +512,15 @@ function DashboardContent() {
       </div>
 
       {/* ===== Row 4: Status funnel (left 1/2) + Merchant TOP10 (right 1/2) ===== */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div className="bg-white/[0.03] border border-white/[0.06] rounded-2xl backdrop-blur-xl p-4 sm:p-5 shadow-[0_0_30px_rgba(6,182,212,0.08)]">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+        <div className="bg-white/[0.03] border border-white/[0.06] rounded-2xl backdrop-blur-xl p-4 sm:p-5 shadow-[0_0_30px_rgba(6,182,212,0.08)] transition-shadow duration-300 hover:shadow-[0_4px_32px_rgba(6,182,212,0.15)]">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-sm font-medium text-white">订单流转漏斗</h3>
             <span className="text-gray-500 text-xs">待接单→已完成</span>
           </div>
           <ReactECharts option={funnelOption} theme="dark" style={{ height: '300px', width: '100%' }} />
         </div>
-        <div className="bg-white/[0.03] border border-white/[0.06] rounded-2xl backdrop-blur-xl p-4 sm:p-5 shadow-[0_0_30px_rgba(6,182,212,0.08)]">
+        <div className="bg-white/[0.03] border border-white/[0.06] rounded-2xl backdrop-blur-xl p-4 sm:p-5 shadow-[0_0_30px_rgba(6,182,212,0.08)] transition-shadow duration-300 hover:shadow-[0_4px_32px_rgba(6,182,212,0.15)]">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-sm font-medium text-white">商家 TOP10</h3>
             <span className="text-gray-500 text-xs">按订单量</span>
@@ -530,7 +530,7 @@ function DashboardContent() {
       </div>
 
       {/* ===== Row 5: Live order ticker (collapsible) ===== */}
-      <div className="bg-white/[0.03] border border-white/[0.06] rounded-2xl backdrop-blur-xl overflow-hidden shadow-[0_0_30px_rgba(6,182,212,0.08)]">
+      <div className="bg-white/[0.03] border border-white/[0.06] rounded-2xl backdrop-blur-xl overflow-hidden shadow-[0_0_30px_rgba(6,182,212,0.08)] transition-shadow duration-300 hover:shadow-[0_4px_32px_rgba(6,182,212,0.15)]">
         <div
           className="px-4 sm:px-5 py-3 border-b border-white/[0.06] flex items-center gap-3 cursor-pointer hover:bg-white/[0.02] transition-colors"
           onClick={() => setTickerCollapsed(!tickerCollapsed)}

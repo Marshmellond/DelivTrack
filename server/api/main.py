@@ -19,6 +19,7 @@ from .crud_menu import router as menu_router
 from .crud_orders import router as orders_router
 from .websocket import router as ws_router
 from .health import router as health_router
+from .monitor import router as monitor_router
 
 app = FastAPI(title="Delivery Dashboard API", version="1.0.0")
 
@@ -38,6 +39,7 @@ app.include_router(riders_router, prefix="/api")
 app.include_router(menu_router, prefix="/api")
 app.include_router(orders_router, prefix="/api")
 app.include_router(health_router, prefix="/api")
+app.include_router(monitor_router, prefix="/api")
 app.include_router(ws_router)  # WebSocket has its own path, no prefix needed
 
 

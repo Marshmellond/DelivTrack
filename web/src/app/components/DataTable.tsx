@@ -88,7 +88,7 @@ export default function DataTable<T extends Record<string, unknown>>({
                   key={rowKey ? rowKey(record) : idx}
                   onClick={() => onRowClick?.(record)}
                   className={`border-b border-white/[0.04] transition-all duration-150 ${
-                    onRowClick ? 'cursor-pointer hover:bg-cyan-500/[0.06]' : 'hover:bg-white/[0.02]'
+                    onRowClick ? 'cursor-pointer hover:bg-cyan-500/[0.06] hover:shadow-[inset_4px_0_0_rgba(6,182,212,0.3)]' : 'hover:bg-white/[0.03] hover:shadow-[inset_4px_0_0_rgba(255,255,255,0.05)]'
                   }`}
                   style={{ animationDelay: `${idx * 40}ms` }}
                 >

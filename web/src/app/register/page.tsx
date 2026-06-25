@@ -10,20 +10,42 @@ export default function RegisterPage() {
 
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [phone, setPhone] = useState('');
-  const [address, setAddress] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError('');
+
+    // Validate
+    if (!username.trim()) {
+      setError('请输入用户名');
+      return;
+    }
+    if (username.trim().length < 2) {
+      setError('用户名至少需要 2 个字符');
+      return;
+    }
+    if (!password) {
+      setError('请输入密码');
+      return;
+    }
+    if (password.length < 6) {
+      setError('密码至少需要 6 个字符');
+      return;
+    }
+    if (password !== confirmPassword) {
+      setError('两次输入的密码不一致');
+      return;
+    }
+
     setLoading(true);
 
     try {
       const res = await apiFetch('/api/auth/register', {
         method: 'POST',
-        body: JSON.stringify({ username, password, phone: phone || undefined, address: address || undefined }),
+        body: JSON.stringify({ username: username.trim(), password, phone: '', address: '' }),
       });
 
       if (!res.ok) {
@@ -33,7 +55,7 @@ export default function RegisterPage() {
 
       router.push('/login?registered=1');
     } catch (err) {
-      setError(err instanceof Error ? err.message : '注册失败');
+      setError(err instanceof Error ? err.message : '注册失败，请稍后重试');
     } finally {
       setLoading(false);
     }
@@ -88,33 +110,21 @@ export default function RegisterPage() {
                     onChange={(e) => setPassword(e.target.value)}
                     required
                     className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-white/[0.04] border border-white/[0.08] text-white placeholder-gray-600 focus:outline-none focus:border-cyan-500/40 focus:ring-1 focus:ring-cyan-500/20 transition-all duration-200"
-                    placeholder="请输入密码"
+                    placeholder="请输入密码（至少 6 位）"
                   />
                 </div>
               </div>
               <div>
-                <label className="block text-gray-400 text-sm mb-1.5">手机号（选填）</label>
+                <label className="block text-gray-400 text-sm mb-1.5">确认密码</label>
                 <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600 text-sm">📱</span>
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600 text-sm">🔒</span>
                   <input
-                    type="text"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
+                    type="password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    required
                     className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-white/[0.04] border border-white/[0.08] text-white placeholder-gray-600 focus:outline-none focus:border-cyan-500/40 focus:ring-1 focus:ring-cyan-500/20 transition-all duration-200"
-                    placeholder="请输入手机号"
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="block text-gray-400 text-sm mb-1.5">地址（选填）</label>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600 text-sm">📍</span>
-                  <input
-                    type="text"
-                    value={address}
-                    onChange={(e) => setAddress(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-white/[0.04] border border-white/[0.08] text-white placeholder-gray-600 focus:outline-none focus:border-cyan-500/40 focus:ring-1 focus:ring-cyan-500/20 transition-all duration-200"
-                    placeholder="请输入地址"
+                    placeholder="请再次输入密码"
                   />
                 </div>
               </div>

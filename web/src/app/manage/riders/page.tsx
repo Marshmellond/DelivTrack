@@ -2,10 +2,10 @@
 
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import ReactECharts from 'echarts-for-react';
-import { apiFetch } from '../lib/api';
-import AuthGuard from '../components/AuthGuard';
-import DataTable from '../components/DataTable';
-import { useToast } from '../components/Toast';
+import { apiFetch } from '../../lib/api';
+import AuthGuard from '../../components/AuthGuard';
+import DataTable from '../../components/DataTable';
+import { useToast } from '../../components/Toast';
 
 interface Rider {
   id: number;
@@ -348,10 +348,10 @@ function RidersContent() {
 
   return (
     <div className="p-4 sm:p-6 space-y-4 animate-slide-up">
-      {/* ---- NEW: Performance stats card ---- */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      {/* ---- 4-col stats row ---- */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="glow-card bg-white/[0.03] border border-white/[0.06] rounded-2xl backdrop-blur-xl p-4 flex flex-col gap-2 shadow-[0_0_30px_rgba(6,182,212,0.1)]">
-          <p className="text-gray-500 text-xs">总配送单数</p>
+          <p className="text-gray-500 text-xs">总配送订单数</p>
           <p className="text-2xl font-bold text-cyan-400 stat-number">
             <AnimatedNumber value={performanceStats.totalDeliveries} />
           </p>
@@ -372,80 +372,76 @@ function RidersContent() {
           </p>
           <p className="text-gray-600 text-xs">平台平均准时送达率</p>
         </div>
-      </div>
-
-      {/* ---- NEW: Status distribution pie + quick filter row ---- */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="bg-white/[0.03] border border-white/[0.06] rounded-2xl backdrop-blur-xl p-4 shadow-[0_0_30px_rgba(6,182,212,0.08)] flex flex-col items-center justify-center">
-          <h3 className="text-sm font-medium text-white mb-2">骑手状态分布</h3>
-          <ReactECharts option={statusPieOption} theme="dark" style={{ height: '180px', width: '100%' }} />
-          <div className="flex gap-4 mt-2 text-xs">
+          <h3 className="text-xs text-gray-500 mb-1">状态分布</h3>
+          <ReactECharts option={statusPieOption} theme="dark" style={{ height: '100px', width: '100%' }} />
+          <div className="flex gap-3 mt-1 text-xs">
             <span className="text-emerald-400">在线: {statusPieData.online}</span>
             <span className="text-gray-500">离线: {statusPieData.offline}</span>
           </div>
         </div>
-        <div className="lg:col-span-2">
-          <div className="bg-white/[0.03] border border-white/[0.06] rounded-2xl backdrop-blur-xl p-4 sm:p-5 shadow-[0_0_30px_rgba(6,182,212,0.08)]">
-            <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-              <h2 className="text-xl font-bold text-white">骑手管理</h2>
-              {isAdmin && (
-                <button
-                  onClick={openAdd}
-                  className="px-4 py-2 rounded-xl bg-gradient-to-r from-cyan-500/20 to-emerald-500/15 border border-cyan-500/25 text-cyan-400 text-sm hover:from-cyan-500/30 hover:to-emerald-500/20 hover:shadow-[0_0_15px_rgba(6,182,212,0.15)] transition-all duration-200"
-                >
-                  + 添加骑手
-                </button>
-              )}
-            </div>
+      </div>
 
-            {/* ---- NEW: Quick filter tabs ---- */}
-            <div className="flex flex-wrap gap-3 mb-4">
-              <div className="flex gap-1 bg-white/[0.03] border border-white/[0.06] rounded-xl p-1">
-                {(['all', 'online', 'offline'] as const).map((key) => (
-                  <button
-                    key={key}
-                    onClick={() => { setStatusQuickFilter(key); setPage(1); }}
-                    className={`px-3 py-1.5 text-xs rounded-lg transition-all duration-200 ${
-                      statusQuickFilter === key
-                        ? 'bg-gradient-to-r from-cyan-500/20 to-emerald-500/15 text-cyan-400'
-                        : 'text-gray-400 hover:text-white'
-                    }`}
-                  >
-                    {key === 'all' ? '全部' : key === 'online' ? '在线' : '离线'}
-                  </button>
-                ))}
-              </div>
-              <input
-                type="text"
-                placeholder="搜索姓名/手机号..."
-                value={search}
-                onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-                className="px-3 py-2 rounded-xl bg-white/[0.04] border border-white/[0.08] text-white text-sm placeholder-gray-600 focus:outline-none focus:border-cyan-500/40 transition-all w-64"
-              />
-            </div>
-
-            <DataTable
-              columns={columns}
-              data={paginatedRiders as unknown as Record<string, unknown>[]}
-              total={filteredTotal}
-              page={page}
-              pageSize={pageSize}
-              onPageChange={setPage}
-              loading={loading}
-              rowKey={(record) => String(record.id)}
-            />
-          </div>
+      {/* ---- Rider table section ---- */}
+      <div className="bg-white/[0.03] border border-white/[0.06] rounded-2xl backdrop-blur-xl p-4 sm:p-5 shadow-[0_0_30px_rgba(6,182,212,0.08)]">
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+          <h2 className="text-xl font-bold text-white">骑手管理</h2>
+          {isAdmin && (
+            <button
+              onClick={openAdd}
+              className="px-4 py-2 rounded-xl bg-gradient-to-r from-cyan-500/20 to-emerald-500/15 border border-cyan-500/25 text-cyan-400 text-sm hover:from-cyan-500/30 hover:to-emerald-500/20 hover:shadow-[0_0_15px_rgba(6,182,212,0.15)] transition-all duration-200"
+            >
+              + 添加骑手
+            </button>
+          )}
         </div>
+
+        {/* ---- Quick filter tabs ---- */}
+        <div className="flex flex-wrap gap-3 mb-4">
+          <div className="flex gap-1 bg-white/[0.03] border border-white/[0.06] rounded-xl p-1">
+            {(['all', 'online', 'offline'] as const).map((key) => (
+              <button
+                key={key}
+                onClick={() => { setStatusQuickFilter(key); setPage(1); }}
+                className={`px-3 py-1.5 text-xs rounded-lg transition-all duration-200 ${
+                  statusQuickFilter === key
+                    ? 'bg-gradient-to-r from-cyan-500/20 to-emerald-500/15 text-cyan-400'
+                    : 'text-gray-400 hover:text-white'
+                }`}
+              >
+                {key === 'all' ? '全部' : key === 'online' ? '在线' : '离线'}
+              </button>
+            ))}
+          </div>
+          <input
+            type="text"
+            placeholder="搜索姓名/手机号..."
+            value={search}
+            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+            className="px-3 py-2 rounded-xl bg-white/[0.04] border border-white/[0.08] text-white text-sm placeholder-gray-600 focus:outline-none focus:border-cyan-500/40 transition-all w-64"
+          />
+        </div>
+
+        <DataTable
+          columns={columns}
+          data={paginatedRiders as unknown as Record<string, unknown>[]}
+          total={filteredTotal}
+          page={page}
+          pageSize={pageSize}
+          onPageChange={setPage}
+          loading={loading}
+          rowKey={(record) => String(record.id)}
+        />
       </div>
 
       {/* Add/Edit Modal */}
       {modalOpen && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-slide-up"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm modal-backdrop"
           onClick={() => setModalOpen(false)}
         >
           <div
-            className="bg-slate-900/95 border border-white/[0.08] rounded-2xl p-6 w-full max-w-md mx-4 shadow-[0_0_40px_rgba(6,182,212,0.1)]"
+            className="relative bg-slate-900/95 border border-white/[0.08] rounded-2xl p-6 w-full max-w-md mx-4 shadow-[0_0_40px_rgba(6,182,212,0.1)] modal-content"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="absolute top-0 left-0 right-0 h-[2px] rounded-t-2xl bg-gradient-to-r from-transparent via-cyan-400 to-transparent" />
@@ -525,7 +521,7 @@ function RidersContent() {
 
 export default function RidersPage() {
   return (
-    <AuthGuard>
+    <AuthGuard adminOnly>
       <RidersContent />
     </AuthGuard>
   );

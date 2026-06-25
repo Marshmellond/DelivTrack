@@ -112,7 +112,7 @@ def trend(response: Response):
         with conn.cursor() as cur:
             cur.execute(
                 "SELECT * FROM dashboard_hourly "
-                "WHERE time_slot >= NOW() - INTERVAL 1 HOUR "
+                "WHERE time_slot >= NOW() - INTERVAL 7 DAY "
                 "ORDER BY time_slot"
             )
             rows = cur.fetchall()

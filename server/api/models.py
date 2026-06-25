@@ -13,7 +13,9 @@ from pydantic import BaseModel, Field
 class UserCreate(BaseModel):
     username: str = Field(..., min_length=2, max_length=64)
     password: str = Field(..., min_length=6)
-    role: str = Field(default="viewer")  # admin / editor / viewer
+    phone: str = Field(default="")
+    address: str = Field(default="")
+    role: str = Field(default="user")  # admin / user
 
 
 class UserLogin(BaseModel):
@@ -52,6 +54,9 @@ class MerchantUpdate(BaseModel):
     name: Optional[str] = None
     category: Optional[str] = None
     city: Optional[str] = None
+    address: Optional[str] = None
+    phone: Optional[str] = None
+    status: Optional[str] = None
 
 
 class MerchantResponse(BaseModel):
@@ -59,6 +64,9 @@ class MerchantResponse(BaseModel):
     name: str
     category: Optional[str] = None
     city: Optional[str] = None
+    address: Optional[str] = None
+    phone: Optional[str] = None
+    status: Optional[str] = None
 
 
 # ── Rider ─────────────────────────────────────────────────────────────────────

@@ -17,7 +17,7 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-[#0a0e27] flex items-center justify-center">
-      <p className="text-gray-400">Redirecting...</p>
+      <p className="text-gray-400">跳转中...</p>
     </div>
   );
 }
