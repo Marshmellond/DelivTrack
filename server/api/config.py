@@ -5,7 +5,7 @@ MYSQL_CFG = {
     "port": 3306,
     "user": "root",
     "password": "123456",
-    "database": "delivery_poc",
+    "database": "delivery_dashboard",
     "charset": "utf8mb4",
 }
 

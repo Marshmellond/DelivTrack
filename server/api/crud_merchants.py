@@ -12,16 +12,18 @@ router = APIRouter(prefix="/merchants", tags=["merchants"])
 def _row_to_merchant(row) -> dict:
     return {
         "id": row[0], "name": row[1], "category": row[2],
-        "city": row[3], "address": row[4] if len(row) > 4 else "",
+        "city": row[3] if len(row) > 3 else "",
+        "address": row[4] if len(row) > 4 else "",
         "phone": row[5] if len(row) > 5 else "",
         "status": row[6] if len(row) > 6 else "active",
+        "create_time": str(row[7]) if len(row) > 7 else None,
     }
 
 
 @router.get("")
 def list_merchants(
     page: int = Query(1, ge=1),
-    page_size: int = Query(20, ge=1, le=100),
+    page_size: int = Query(20, ge=1, le=1000),
     name: str = Query(None),
     search: str = Query(None, alias="search"),
     category: str = Query(None),
@@ -47,7 +49,7 @@ def list_merchants(
 
             offset = (page - 1) * page_size
             cur.execute(
-                f"SELECT id, name, category, city, address, phone, status FROM merchants{where_sql} "
+                f"SELECT id, name, category, city, address, phone, status, create_time FROM merchants{where_sql} "
                 "ORDER BY id DESC LIMIT %s OFFSET %s",
                 params + [page_size, offset],
             )
@@ -68,7 +70,7 @@ def get_merchant(merchant_id: int, _admin: dict = Depends(admin_required)):
     conn = get_connection()
     try:
         with conn.cursor() as cur:
-            cur.execute("SELECT id, name, category, city, address, phone, status FROM merchants WHERE id = %s", (merchant_id,))
+            cur.execute("SELECT id, name, category, city, address, phone, status, create_time FROM merchants WHERE id = %s", (merchant_id,))
             row = cur.fetchone()
     finally:
         conn.close()
@@ -84,8 +86,8 @@ def create_merchant(body: MerchantCreate, _admin: dict = Depends(admin_required)
     try:
         with conn.cursor() as cur:
             cur.execute(
-                "INSERT INTO merchants (name, category, city) VALUES (%s, %s, %s)",
-                (body.name, body.category, body.city),
+                "INSERT INTO merchants (name, category, city, address, phone, status) VALUES (%s, %s, %s, %s, %s, 'active')",
+                (body.name, body.category, getattr(body, "city", ""), getattr(body, "address", ""), getattr(body, "phone", "")),
             )
             conn.commit()
             mid = cur.lastrowid
@@ -100,7 +102,7 @@ def update_merchant(merchant_id: int, body: MerchantUpdate, _admin: dict = Depen
     conn = get_connection()
     try:
         with conn.cursor() as cur:
-            cur.execute("SELECT id, name, category, city, address, phone, status FROM merchants WHERE id = %s", (merchant_id,))
+            cur.execute("SELECT id, name, category, city, address, phone, status, create_time FROM merchants WHERE id = %s", (merchant_id,))
             if not cur.fetchone():
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Merchant not found")
 
@@ -112,16 +114,19 @@ def update_merchant(merchant_id: int, body: MerchantUpdate, _admin: dict = Depen
             if body.category is not None:
                 set_parts.append("category = %s")
                 params.append(body.category)
-            if body.city is not None:
-                set_parts.append("city = %s")
-                params.append(body.city)
+            if getattr(body, 'address', None) is not None:
+                set_parts.append("address = %s")
+                params.append(getattr(body, 'address', None))
+            if getattr(body, 'phone', None) is not None:
+                set_parts.append("phone = %s")
+                params.append(getattr(body, 'phone', None))
 
             if set_parts:
                 params.append(merchant_id)
                 cur.execute(f"UPDATE merchants SET {', '.join(set_parts)} WHERE id = %s", params)
                 conn.commit()
 
-            cur.execute("SELECT id, name, category, city, address, phone, status FROM merchants WHERE id = %s", (merchant_id,))
+            cur.execute("SELECT id, name, category, city, address, phone, status, create_time FROM merchants WHERE id = %s", (merchant_id,))
             row = cur.fetchone()
     finally:
         conn.close()

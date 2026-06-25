@@ -23,7 +23,7 @@ def _row_to_item(row) -> dict:
 @router.get("")
 def list_menu_items(
     page: int = Query(1, ge=1),
-    page_size: int = Query(20, ge=1, le=100),
+    page_size: int = Query(20, ge=1, le=1000),
     merchant_id: int = Query(None),
     name: str = Query(None),
     _admin: dict = Depends(admin_required),

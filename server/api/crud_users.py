@@ -22,7 +22,7 @@ def _row_to_user(row) -> dict:
 @router.get("")
 def list_users(
     page: int = Query(1, ge=1),
-    page_size: int = Query(20, ge=1, le=100),
+    page_size: int = Query(20, ge=1, le=1000),
     username: str = Query(None),
     role: str = Query(None),
     current_user: dict = Depends(get_current_user),

@@ -24,7 +24,7 @@ def _row_to_order(row) -> dict:
 @router.get("")
 def list_orders(
     page: int = Query(1, ge=1),
-    page_size: int = Query(20, ge=1, le=100),
+    page_size: int = Query(20, ge=1, le=1000),
     status_filter: str = Query(None, alias="status"),
     city: str = Query(None),
     merchant_id: int = Query(None),

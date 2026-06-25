@@ -12,8 +12,9 @@ router = APIRouter(prefix="/riders", tags=["riders"])
 def _row_to_rider(row) -> dict:
     return {
         "id": row[0], "name": row[1], "phone": row[2],
-        "city": row[3], "status": row[4],
-        "vehicle": row[5] if len(row) > 5 else "",
+        "city": row[3] if len(row) > 3 else "",
+        "vehicle": row[4] if len(row) > 4 else "",
+        "status": row[5],
         "create_time": str(row[6]) if len(row) > 6 else None,
     }
 
@@ -21,7 +22,7 @@ def _row_to_rider(row) -> dict:
 @router.get("")
 def list_riders(
     page: int = Query(1, ge=1),
-    page_size: int = Query(20, ge=1, le=100),
+    page_size: int = Query(20, ge=1, le=10000),
     name: str = Query(None),
     search: str = Query(None, alias="search"),
     status_filter: str = Query(None, alias="status"),
@@ -47,7 +48,7 @@ def list_riders(
 
             offset = (page - 1) * page_size
             cur.execute(
-                f"SELECT id, name, phone, city, status, vehicle, create_time FROM riders{where_sql} "
+                f"SELECT id, name, phone, city, vehicle, status, create_time FROM riders{where_sql} "
                 "ORDER BY id DESC LIMIT %s OFFSET %s",
                 params + [page_size, offset],
             )
@@ -68,7 +69,7 @@ def get_rider(rider_id: int, _admin: dict = Depends(admin_required)):
     conn = get_connection()
     try:
         with conn.cursor() as cur:
-            cur.execute("SELECT id, name, phone, city, status, vehicle, create_time FROM riders WHERE id = %s", (rider_id,))
+            cur.execute("SELECT id, name, phone, city, vehicle, status, create_time FROM riders WHERE id = %s", (rider_id,))
             row = cur.fetchone()
     finally:
         conn.close()
@@ -84,8 +85,8 @@ def create_rider(body: RiderCreate, _admin: dict = Depends(admin_required)):
     try:
         with conn.cursor() as cur:
             cur.execute(
-                "INSERT INTO riders (name, phone, city, status) VALUES (%s, %s, %s, %s)",
-                (body.name, body.phone, body.city, body.status),
+                "INSERT INTO riders (name, phone, city, vehicle, status) VALUES (%s, %s, %s, %s, %s)",
+                (body.name, body.phone, getattr(body, 'vehicle', '电动车'), body.status),
             )
             conn.commit()
             rid = cur.lastrowid
@@ -100,7 +101,7 @@ def update_rider(rider_id: int, body: RiderUpdate, _admin: dict = Depends(admin_
     conn = get_connection()
     try:
         with conn.cursor() as cur:
-            cur.execute("SELECT id, name, phone, city, status, vehicle, create_time FROM riders WHERE id = %s", (rider_id,))
+            cur.execute("SELECT id, name, phone, city, vehicle, status, create_time FROM riders WHERE id = %s", (rider_id,))
             if not cur.fetchone():
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Rider not found")
 
@@ -112,9 +113,9 @@ def update_rider(rider_id: int, body: RiderUpdate, _admin: dict = Depends(admin_
             if body.phone is not None:
                 set_parts.append("phone = %s")
                 params.append(body.phone)
-            if body.city is not None:
+            if getattr(body, 'city', None) is not None:
                 set_parts.append("city = %s")
-                params.append(body.city)
+                params.append(getattr(body, 'city', None))
             if body.status is not None:
                 set_parts.append("status = %s")
                 params.append(body.status)
@@ -124,7 +125,7 @@ def update_rider(rider_id: int, body: RiderUpdate, _admin: dict = Depends(admin_
                 cur.execute(f"UPDATE riders SET {', '.join(set_parts)} WHERE id = %s", params)
                 conn.commit()
 
-            cur.execute("SELECT id, name, phone, city, status, vehicle, create_time FROM riders WHERE id = %s", (rider_id,))
+            cur.execute("SELECT id, name, phone, city, vehicle, status, create_time FROM riders WHERE id = %s", (rider_id,))
             row = cur.fetchone()
     finally:
         conn.close()
@@ -147,7 +148,7 @@ def toggle_rider_status(rider_id: int, _admin: dict = Depends(admin_required)):
             cur.execute("UPDATE riders SET status = %s WHERE id = %s", (new_status, rider_id))
             conn.commit()
 
-            cur.execute("SELECT id, name, phone, city, status, vehicle, create_time FROM riders WHERE id = %s", (rider_id,))
+            cur.execute("SELECT id, name, phone, city, vehicle, status, create_time FROM riders WHERE id = %s", (rider_id,))
             updated = cur.fetchone()
     finally:
         conn.close()

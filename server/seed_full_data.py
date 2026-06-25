@@ -1,6 +1,6 @@
 """Generate massive demo data for delivery dashboard POC.
 
-Seeds 500 realistic orders into delivery_poc and populates all dashboard
+Seeds 500 realistic orders into delivery_dashboard and populates all dashboard
 aggregation tables from the order data.
 
 Usage:
@@ -21,7 +21,7 @@ MYSQL_CFG = {
     "port": 3306,
     "user": "root",
     "password": "123456",
-    "database": "delivery_poc",
+    "database": "delivery_dashboard",
     "charset": "utf8mb4",
 }
 
