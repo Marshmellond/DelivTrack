@@ -1,235 +1,153 @@
-# DelivTrack -- 外卖配送实时监控与运营管理系统
+# DelivTrack — 外卖配送实时监控与运营管理系统
 
 ## 项目简介
 
-O2O 外卖配送实时数据分析与运营管理平台。Python 模拟器生成订单，经 Kafka 流转至 Flink 实时计算，结果写入 MySQL，由 FastAPI 后端提供 API，Next.js 前端渲染。
+O2O 外卖配送实时数据分析与运营管理平台。Python 模拟器生成订单 → Kafka 流转 → Flink 实时计算 → MySQL 存储 → FastAPI 接口 → Next.js 前端展示。
 
-```
-  generator               Flink               MySQL              FastAPI            Next.js
-  (Python)    --> Kafka --> (Java)  -->  delivery_dashboard  -->  API (Python)  -->  前端 (React)
-  模拟订单       pipeline   5s窗口聚合              实时查询           实时大屏/管理
-```
+## 页面一览
+
+### 数据中心
+
+| 页面 | 截图 |
+|------|------|
+| 实时看板 `/dashboard` | ![实时看板](docs/images/实时看板.png) |
+| 订单分析 `/analytics/orders` | ![订单分析](docs/images/订单分析.png) |
+| 营收分析 `/analytics/revenue` | ![营收分析](docs/images/营收分析.png) |
+| 配送分析 `/analytics/delivery` | ![配送分析](docs/images/配送分析.png) |
+| 客户洞察 `/analytics/customers` | ![客户洞察](docs/images/客户洞察.png) |
+
+### 管理中心
+
+| 页面 | 截图 |
+|------|------|
+| 订单管理 `/manage/orders` | ![订单管理](docs/images/订单管理.png) |
+| 骑手管理 `/manage/riders` | ![骑手管理](docs/images/骑手管理.png) |
+| 商家管理 `/manage/merchants` | ![商家管理](docs/images/商家管理.png) |
+| 用户管理 `/manage/users` | ![用户管理](docs/images/用户管理.png) |
+| 菜品管理 `/manage/menu` | ![菜品管理](docs/images/菜品管理.png) |
+| 配送区域 `/manage/zones` | ![配送区域](docs/images/配送区域.png) |
+
+### 运营中心
+
+| 页面 | 截图 |
+|------|------|
+| 订单处理 `/operations/orders` | ![订单处理](docs/images/订单处理.png) |
+| 骑手调度 `/operations/dispatch` | ![骑手调度](docs/images/骑手调度.png) |
+
+### 系统
+
+| 页面 | 截图 |
+|------|------|
+| 系统监控 `/monitor` | ![系统监控](docs/images/系统监控.png) |
+| 操作日志 `/system/logs` | ![操作日志](docs/images/操作日志.png) |
+| 通知中心 `/notifications` | ![通知中心](docs/images/通知中心.png) |
+| 个人中心 `/profile` | ![个人中心](docs/images/个人中心.png) |
+
+### 认证
+
+| 页面 | 截图 |
+|------|------|
+| 登录 `/login` | ![登录](docs/images/登录页面.png) |
+| 注册 `/register` | ![注册](docs/images/注册页面.png) |
+
+---
 
 ## 技术架构
 
 ```
-  +-----------+     +-----------+     +-----------+     +-----------+     +-----------+
-  | Generator | --> |   Kafka   | --> |   Flink   | --> |   MySQL   | <-- |  FastAPI  |
-  |  (Python) |     |  3-node   |     |  1.17.2   |     |  Node_02  |     |  (uvicorn)|
-  +-----------+     +-----------+     +-----------+     +-----------+     +-----------+
-       |                  |                 |                 |                 |
-       |          Node_01:9092       Node_02:8081        3306                |
-       |          Node_02:9092       WebUI                delivery_          |
-       |          Node_03:9092                            dashboard          +-----------+
-       |                                                                     |  Next.js  |
-       +-------------------------------------------------------------------->|  :3000    |
-                                              API calls (REST + WS)          +-----------+
+Generator(Python) → Kafka(3 Broker) → Flink(5s窗口) → MySQL(9表)
+                                                           ↓
+Next.js(18页面) ← FastAPI(40+接口) ←─────────────────────┘
 ```
+
+| 层级 | 技术 | 说明 |
+|------|------|------|
+| 数据生成 | Python + kafka-python + pymysql | generator/ 独立项目，5条/秒 |
+| 消息队列 | Kafka 2.8.2 | 3 Broker，Topic: delivery-orders |
+| 流计算 | Flink 1.17.2 | FlinkKafkaConsumer → 5s 窗口 → MySQL |
+| 存储 | MySQL 5.7 | Node_02, delivery_dashboard 库, 9 张表 |
+| API | FastAPI + JWT + bcrypt | 40+ REST 端点 + WebSocket |
+| 前端 | Next.js 16 + ECharts + TailwindCSS v4 | 18 页面, 暗色主题 |
 
 ## 项目结构
 
 ```
 DelivTrack/
-├── README.md                         # 主文档（本文件）
+├── README.md
 ├── docs/
-│   ├── full-schema.sql               # 完整建表 SQL（9 张表）
-│   └── 外卖配送实时监控与运营管理系统-详细方案.md
-├── scripts/                          # 集群运维脚本（部署于 Node_01）
-├── generator/                        # Python 数据模拟器
-│   ├── pyproject.toml
-│   ├── simulator/
-│   │   ├── run.py                    # 入口：启动 Kafka Producer 循环
-│   │   ├── generator.py             # 订单生成逻辑（从 MySQL 加载基础数据）
-│   │   ├── config.py                # Kafka / MySQL 连接参数
-│   │   └── seed_data.py             # 基础数据种子（独立脚本）
-│   └── README.md
-├── flink/                            # Flink 流计算（Java Maven）
-│   ├── pom.xml
-│   ├── src/main/java/com/delivery/
-│   │   ├── DeliveryJob.java         # Flink Job: Kafka Source -> Window -> MySQL Sink
-│   │   └── Order.java               # POJO (Kafka JSON 映射)
-│   └── README.md
-├── server/                           # FastAPI 后端
-│   ├── pyproject.toml
-│   ├── seed_full_data.py            # 完整种子数据（1000 用户 / 1000 订单 / 全量聚合）
-│   ├── api/
-│   │   ├── main.py                  # FastAPI 入口
-│   │   ├── config.py                # MySQL / JWT / Kafka 配置
-│   │   ├── database.py              # MySQL 连接工具
-│   │   ├── models.py                # Pydantic 模型
-│   │   ├── auth.py                  # 认证 (register / login / JWT)
-│   │   ├── dashboard.py             # 大屏只读接口 (summary / regions / trends...)
-│   │   ├── health.py                # 健康检查 (MySQL + Kafka 连通性)
-│   │   ├── monitor.py               # 系统监控 (Pipeline / 聚合统计)
-│   │   ├── websocket.py             # WebSocket 实时推送 (500ms 轮询广播)
-│   │   ├── crud_users.py            # 用户 CRUD
-│   │   ├── crud_merchants.py        # 商家 CRUD
-│   │   ├── crud_riders.py           # 骑手 CRUD
-│   │   ├── crud_menu.py             # 菜单 CRUD
-│   │   └── crud_orders.py           # 订单查询
-│   └── README.md
-└── web/                              # Next.js 前端
-    ├── package.json
-    ├── tsconfig.json
-    ├── next.config.ts
-    ├── src/app/
-    │   ├── page.tsx                  # 首页（自动跳转）
-    │   ├── layout.tsx                # 根布局
-    │   ├── login/page.tsx            # 登录
-    │   ├── register/page.tsx         # 注册
-    │   ├── dashboard/page.tsx        # 运营总览大屏
-    │   ├── monitor/page.tsx          # 实时监控大屏
-    │   ├── orders/page.tsx           # 全部订单
-    │   ├── riders/page.tsx           # 骑手状态
-    │   ├── merchants/page.tsx        # 商家列表
-    │   ├── profile/page.tsx          # 个人中心
-    │   ├── notifications/page.tsx    # 系统通知
-    │   ├── help/page.tsx             # 帮助文档
-    │   ├── manage/                   # 后台管理
-    │   │   ├── users/page.tsx
-    │   │   ├── merchants/page.tsx
-    │   │   ├── riders/page.tsx
-    │   │   ├── orders/page.tsx
-    │   │   ├── menu/page.tsx
-    │   │   └── zones/page.tsx
-    │   ├── analytics/                # 数据分析
-    │   │   ├── orders/page.tsx
-    │   │   ├── revenue/page.tsx
-    │   │   ├── delivery/page.tsx
-    │   │   └── customers/page.tsx
-    │   ├── operations/               # 运营管理
-    │   │   ├── orders/page.tsx
-    │   │   └── dispatch/page.tsx
-    │   ├── system/logs/page.tsx      # 系统日志
-    │   ├── components/               # 通用组件
-    │   │   ├── AppShell.tsx          # 页面壳
-    │   │   ├── AuthGuard.tsx         # 登录守卫
-    │   │   ├── Sidebar.tsx           # 侧边栏导航
-    │   │   ├── DataTable.tsx         # 数据表格
-    │   │   ├── Toast.tsx             # 消息提示
-    │   │   └── dashboard/
-    │   │       ├── StatCard.tsx
-    │   │       ├── AnimatedNumber.tsx
-    │   │       └── useDashboardData.ts
-    │   └── lib/api.ts                # 前端 API 工具集
-    └── README.md
+│   ├── images/                           # 页面截图
+│   ├── full-schema.sql                   # 9 张表完整建表 SQL
+│   ├── 外卖配送实时监控与运营管理系统-详细方案.md
+│   └── 启动流程.md
+├── generator/                            # Python 模拟器（独立 uv 项目）
+│   └── simulator/                        # config.py, generator.py, run.py, seed_data.py
+├── flink/                                # Flink Maven 项目
+│   └── src/main/java/com/delivery/       # DeliveryJob.java, Order.java
+├── server/                               # FastAPI 后端（独立 uv 项目）
+│   ├── seed_full_data.py                 # 种子数据脚本
+│   └── api/                              # 40+ 个端点
+└── web/                                  # Next.js 前端（pnpm 项目）
+    └── src/app/                           # 18 个页面 + 共享组件
 ```
 
 ## 环境信息
 
-本系统部署在 3 台 CentOS 虚拟机集群上：
+| 节点 | IP | 服务 |
+|------|-----|------|
+| Node_01 | 192.168.157.121 | ZK, HDFS, Kafka, Flink JM |
+| Node_02 | 192.168.157.122 | ZK, HDFS, Kafka, MySQL, Flink TM |
+| Node_03 | 192.168.157.123 | ZK, HDFS, Kafka, Redis |
 
-| 节点     | IP               | 角色与服务                                                       |
-|----------|------------------|------------------------------------------------------------------|
-| Node_01  | 192.168.157.121  | ZooKeeper, HDFS NameNode, Kafka broker, Flink JobManager          |
-| Node_02  | 192.168.157.122  | ZooKeeper, HDFS DataNode, Kafka broker, MySQL 8.0, Flink TaskManager |
-| Node_03  | 192.168.157.123  | ZooKeeper, HDFS DataNode, Kafka broker, Redis (port 6379)        |
-
-通用账号：
-- 所有节点 SSH：`root`
-- MySQL：`root / 123456`，数据库 `delivery_dashboard`
-- Redis：密码 `123456`
-- Kafka：端口 9092，Topic `delivery-orders`
-
-关键地址：
-- Flink WebUI：http://192.168.157.121:8081
-- HDFS NameNode：http://192.168.157.121:50070
-- YARN：http://192.168.157.121:8088
-- FastAPI：http://localhost:8000
-- Next.js：http://localhost:3000
+| 服务 | 地址 | 认证 |
+|------|------|------|
+| MySQL | 192.168.157.122:3306 | root / 123456 |
+| Kafka | 192.168.157.121:9092, .122:9092, .123:9092 | — |
+| Flink WebUI | http://192.168.157.121:8081 | — |
+| Redis | 192.168.157.123:6379 | 123456 |
+| FastAPI | http://localhost:8000 | JWT |
+| Next.js | http://localhost:3000 | — |
 
 ## 快速启动
 
-### 1. 启动集群
-
-在 Node_01 上执行：
-
 ```bash
-start-all.sh    # 依次启动 ZooKeeper -> HDFS -> YARN -> Kafka -> Flink
-```
-
-### 2. 提交 Flink JAR
-
-在本地 `flink/` 目录构建并上传到 Flink：
-
-```bash
-cd flink
-mvn clean package -DskipTests
-scp target/delivery-flink-poc-1.0-SNAPSHOT.jar root@192.168.157.121:/tmp/
-
-# 在 Node_01 上提交 Job
+# 1. 集群
 ssh root@192.168.157.121
-source /etc/profile
-flink run /tmp/delivery-flink-poc-1.0-SNAPSHOT.jar
+start-all.sh
+
+# 2. Flink JAR（IDEA Maven clean package 后）
+# 打开 http://192.168.157.121:8081 → Submit JAR
+
+# 3. 种子数据（首次运行）
+cd server && uv run python seed_full_data.py
+
+# 4. 本地服务（3 终端）
+cd generator && uv run python simulator/run.py
+cd server && uv run uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
+cd web && pnpm dev
+
+# 5. 打开
+http://localhost:3000
 ```
-
-### 3. 导入种子数据
-
-```bash
-cd server
-uv run python seed_full_data.py
-```
-
-### 4. 启动本地服务
-
-```bash
-# 终端 1 — 启动模拟器（开始生成订单）
-cd generator
-uv run python simulator/run.py
-
-# 终端 2 — 启动后端
-cd server
-uv run uvicorn api.main:app --reload
-
-# 终端 3 — 启动前端
-cd web
-pnpm dev
-```
-
-## 页面一览
-
-| 路径                        | 页面          | 说明                           |
-|-----------------------------|---------------|--------------------------------|
-| `/login`                    | 登录          | JWT 认证                       |
-| `/register`                 | 注册          | 新用户注册                     |
-| `/dashboard`                | 运营总览      | 核心指标大屏（GMV / 订单 / 骑手 / 趋势） |
-| `/monitor`                  | 实时监控      | 实时订单流 + Pipeline 状态     |
-| `/orders`                   | 全部订单      | 订单列表与状态跟踪             |
-| `/riders`                   | 骑手状态      | 骑手在线/配送中/离线状态       |
-| `/merchants`                | 商家列表      | 活跃商家一览                   |
-| `/profile`                  | 个人中心      | 个人信息与设置                 |
-| `/notifications`            | 系统通知      | 通知列表                       |
-| `/help`                     | 帮助文档      | 系统使用说明                   |
-| `/manage/users`             | 用户管理      | 后台 CRUD                      |
-| `/manage/merchants`         | 商家管理      | 后台 CRUD                      |
-| `/manage/riders`            | 骑手管理      | 后台 CRUD                      |
-| `/manage/orders`            | 订单管理      | 后台 CRUD                      |
-| `/manage/menu`              | 菜单管理      | 后台 CRUD                      |
-| `/manage/zones`             | 区域管理      | 后台 CRUD                      |
-| `/analytics/orders`         | 订单分析      | 数据分析                       |
-| `/analytics/revenue`        | 营收分析      | 数据分析                       |
-| `/analytics/delivery`       | 配送分析      | 数据分析                       |
-| `/analytics/customers`      | 客户分析      | 数据分析                       |
-| `/operations/orders`        | 订单运营      | 运营管理                       |
-| `/operations/dispatch`      | 智能调度      | 运营管理                       |
-| `/system/logs`              | 系统日志      | 监控日志                       |
 
 ## 账号
 
-| 用户名      | 密码     | 角色   |
-|-------------|----------|--------|
-| `user_0000` | `123456` | admin  |
-| `user_0001` | `123456` | admin  |
-| `user_0005` | `123456` | user   |
-| ...         | `123456` | user   |
+| 用户名 | 密码 | 角色 |
+|--------|------|------|
+| `user_0000` ~ `user_0004` | `123456` | admin |
+| `user_0005` ~ `user_0999` | `123456` | user |
 
-共 1000 个用户（前 5 个为 admin），所有密码统一为 `123456`。
+## 权限
 
-## 子项目
+| 角色 | 可见页面 |
+|------|---------|
+| admin | 全部 18 页 |
+| user | 数据中心 5 页 + 运营中心 2 页 + 通知 + 个人 + 帮助 |
 
-| 子项目       | 目录         | 技术栈                 | 文档                     |
-|-------------|-------------|-----------------------|--------------------------|
-| 数据模拟器   | `generator/` | Python, kafka-python  | `generator/README.md`    |
-| 流计算       | `flink/`     | Java, Maven, Flink    | `flink/README.md`        |
-| 后端 API     | `server/`    | Python, FastAPI       | `server/README.md`       |
-| 前端 Web     | `web/`       | TypeScript, Next.js   | `web/README.md`          |
+## 子项目文档
+
+| 子项目 | 文档 |
+|--------|------|
+| generator/ | [generator/README.md](generator/README.md) |
+| flink/ | [flink/README.md](flink/README.md) |
+| server/ | [server/README.md](server/README.md) |
+| web/ | [web/README.md](web/README.md) |
