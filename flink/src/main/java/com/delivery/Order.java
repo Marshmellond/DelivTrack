@@ -1,12 +1,11 @@
 package com.delivery;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import java.io.Serializable;
 
-/**
- * POC 订单 POJO — Kafka JSON → Java 对象映射
- */
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class Order implements Serializable {
 
     @JsonProperty("order_no")
