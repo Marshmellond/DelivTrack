@@ -15,6 +15,6 @@ MYSQL_USER = "root"
 MYSQL_PASSWORD = "123456"
 MYSQL_DB = "delivery_dashboard"
 
-# 发送频率（演示用，平稳增长）
-INTERVAL = 2      # 2秒一批
-BATCH_SIZE = 2    # 每批 2 条 → 1条/秒
+# 发送频率
+INTERVAL = 1      # 1秒
+BATCH_SIZE = 5    # 每批 5 条 → 5条/秒

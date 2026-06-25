@@ -38,7 +38,10 @@ public class DeliveryJob {
         public void invoke(Acc acc, Context ctx) {
             try (Connection conn = DriverManager.getConnection(MYSQL_URL, "root", "123456");
                  PreparedStatement ps = conn.prepareStatement(
-                     "REPLACE INTO dashboard_summary (id, gmv, order_count, avg_order_amount) VALUES (1, ?, ?, ?)")) {
+                     "INSERT INTO dashboard_summary (id, gmv, order_count, avg_order_amount) VALUES (1, ?, ?, ?) "
+                     + "ON DUPLICATE KEY UPDATE gmv = gmv + VALUES(gmv), "
+                     + "order_count = order_count + VALUES(order_count), "
+                     + "avg_order_amount = (gmv + VALUES(gmv)) / (order_count + VALUES(order_count))")) {
                 double avg = acc.orderCount > 0 ? acc.gmv / acc.orderCount : 0;
                 ps.setDouble(1, acc.gmv); ps.setLong(2, acc.orderCount); ps.setDouble(3, avg);
                 ps.executeUpdate();
