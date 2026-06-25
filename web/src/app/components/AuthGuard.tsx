@@ -30,7 +30,12 @@ export default function AuthGuard({ children, adminOnly = false }: { children: R
   if (!authorized) {
     return (
       <div className="min-h-screen bg-[#0a0e27] flex items-center justify-center">
-        <p className="text-gray-400">验证中...</p>
+        <div className="text-center space-y-4">
+          <p className="text-gray-400">请先登录</p>
+          <a href="/login" className="inline-block px-6 py-2 rounded-xl bg-gradient-to-r from-cyan-500/20 to-emerald-500/15 border border-cyan-500/25 text-cyan-400 hover:from-cyan-500/30">
+            前往登录
+          </a>
+        </div>
       </div>
     );
   }
